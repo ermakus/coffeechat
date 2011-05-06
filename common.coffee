@@ -8,6 +8,7 @@ else
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
 
+
 # Observer pattern
 class Observable
   observe: (name, fn) ->
@@ -81,7 +82,12 @@ class Entity
 
     remove: ->
         @view?.remove()
-        @world.entities.remove( this )
+        delete @world.entities[ @id ]
+        @world.entitiesCount -= 1
+
+    className: ->
+        results = (/function (.{1,})\(/).exec((this).constructor.toString())
+        if results?.length then results[1] else "unknown"
 
     has: (x,y) ->
         (@x < x < (@x + @width)) and (@y < y < (@y + @height))
@@ -115,6 +121,7 @@ class Executor
         e = new Global[data.entity](@world)
         e.create data.x, data.y, data.id
         @world.entities[ e.id ] = e
+        @world.entitiesCount += 1
 
     move: (data)->
         @world.entities[ data.id ].move( data.dx, data.dy )
@@ -125,6 +132,7 @@ class World
     constructor: (@view,@io) ->
         @tick = 0
         @entities = {}
+        @entitiesCount = 0
         @executor   = new Executor(this)
 
     # Place command to outbox
@@ -138,7 +146,10 @@ class World
         ex = @executor
         for [action, data] in @io.read()
             console.log " <- " + action + ":" + JSON.stringify( data )
-            ex[ action ]( data )
+            try
+                ex[ action ]( data )
+            catch error
+                console.log "ERROR: action=#{action} Error:#{error}"
         @io.flush()
 
     # Connect and start main cycle

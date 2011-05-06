@@ -16,9 +16,9 @@ class ServerConnection extends lib.Connection
             client.on 'message', (message) =>
                 @trigger 'message', JSON.parse(message)
                 @socket.broadcast message
-            client.on 'disconnect', ->
+            client.on 'disconnect', =>
                 client.broadcast JSON.stringify([['disconnect', client.sessionId]])
-                @clients.remove client.sessionId
+                delete @clients[client.sessionId]
 
 class ServerWorld extends lib.World
     constructor: ->
@@ -41,8 +41,11 @@ class ServerWorld extends lib.World
         super( null, new ServerConnection( @app ) )
 
         @io.observe 'connect', (id)=>
-            for id, ent of @entities
-                @io.clients[ id ].broadcast( JSON.stringify( {'action':'create', 'id':ent.id,'x':ent.x,'y':ent.y } ) )
+            @io.clients[id].send(
+                JSON.stringify(
+                    ['create',{'entity':ent.className(),'id':ent.id,'x':ent.x,'y':ent.y } ] for id, ent of @entities
+                )
+            ) if @entitiesCount
 
 world = new ServerWorld()
 world.start()
