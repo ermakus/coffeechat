@@ -5,20 +5,23 @@ lib     = require "./common"
 class ServerConnection extends lib.Connection
 
     constructor: (app)->
-       super( require('socket.io').listen app )
-       @clients = {}
-
-
-    connect: ->
+        super()
+        @clients = {}
+        @socket = require('socket.io').listen app
         @socket.on 'connection', (client) =>
             @clients[ client.sessionId ] = client
             @trigger 'connect', client.sessionId
             client.on 'message', (message) =>
-                @trigger 'message', JSON.parse(message)
-                @socket.broadcast message
+                json = JSON.parse(message)
+                @inbox = @inbox.concat json
+                @trigger 'message', json
+#                @socket.broadcast message
             client.on 'disconnect', =>
-                client.broadcast JSON.stringify([['disconnect', client.sessionId]])
+                @trigger 'disconnect', client.sessionId
                 delete @clients[client.sessionId]
+
+    send: (json)->
+        @socket.broadcast json
 
 class ServerWorld extends lib.World
     constructor: ->
@@ -38,14 +41,22 @@ class ServerWorld extends lib.World
             res.sendfile 'common.js'
 
         @app.listen(process.env.PORT || 8000)
+
         super( null, new ServerConnection( @app ) )
 
         @io.observe 'connect', (id)=>
+            console.log @entitiesCount
             @io.clients[id].send(
                 JSON.stringify(
                     ['create',{'entity':ent.className(),'id':ent.id,'x':ent.x,'y':ent.y } ] for id, ent of @entities
                 )
             ) if @entitiesCount
+
+        @io.observe 'disconnect', (id)=>
+                @send 'disconnect', {'id':id }
+
+    execute: (action, data) ->
+        if super(action,data) then @send action, data
 
 world = new ServerWorld()
 world.start()

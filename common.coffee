@@ -8,7 +8,6 @@ else
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
 
-
 # Observer pattern
 class Observable
   observe: (name, fn) ->
@@ -28,35 +27,16 @@ class Connection extends Observable
   constructor: (@socket)->
     @outbox = []
     @inbox = []
-    @observingSocket = {}
-    @setupObservers()
 
-  connect: ->
-    @socket.connect()
+  send: (json) ->
+      alert "Abstract method: Connection.send"
 
-  setupObservers: ->
-    @observe "connect", (id)=>
-        @id = id or @socket.transport?.sessionid
-        console.log( "Connected: " + @id )
-    @observe 'disconnect', =>
-        console.log( "Disconnected: " + @id )
-    @observe 'message', (data) =>
-        @inbox = @inbox.concat data
-
-  observe: (msg, fn) ->
-    super msg, fn
-    return if @observingSocket[msg]
-    @observingSocket[msg] = true
-    @socket.on msg, (json) =>
-        data = JSON.parse(json) if json
-        @trigger msg, data
-
-  send: (args...) ->
+  write: (args...) ->
     @outbox.push args
 
   flush: ->
-    return unless @outbox.length and @id?
-    @socket.send JSON.stringify(@outbox)
+    return unless @outbox.length
+    @send JSON.stringify(@outbox)
     @outbox = []
 
   read: ->
@@ -110,9 +90,6 @@ class Entity
     main: ->
 Global.Entity = Entity
 
-class Creature extends Entity
-Global.Creature = Creature
-
 # Class to execute commands received from Controller or network
 class Executor
     constructor: (@world)->
@@ -125,43 +102,21 @@ class Executor
 
     move: (data)->
         @world.entities[ data.id ].move( data.dx, data.dy )
+
+    connect: (data) ->
+        console.log "User #{data.id} connected"
+
+    disconnect: (data)->
+        console.log "User #{data.id} disconnected"
 Global.Executor = Executor
 
 # Main class that incapsulate all other objects
-class World
+class World extends Observable
     constructor: (@view,@io) ->
         @tick = 0
         @entities = {}
         @entitiesCount = 0
         @executor   = new Executor(this)
-
-    # Place command to outbox
-    send: (action, data) ->
-        console.log " -> " + action + ":" + JSON.stringify( data )
-        @io.send action, data
-
-    # Send outbox and execute commands from inbox
-    # This function called from main cycle
-    network: ->
-        ex = @executor
-        for [action, data] in @io.read()
-            console.log " <- " + action + ":" + JSON.stringify( data )
-            try
-                ex[ action ]( data )
-            catch error
-                console.log "ERROR: action=#{action} Error:#{error}"
-        @io.flush()
-
-    # Connect and start main cycle
-    start: ->
-        @io.connect()
-        setInterval ( => @loop() ), 100
-
-    # Main cycle helper
-    loop: ->
-        @tick += 1
-        @network()
-        @main()
 
     # Find object by location
     find: (x,y) ->
@@ -170,9 +125,29 @@ class World
             hits.push(e) if e.has(x,y)
         return hits
 
-    # Call main() for each entity
-    main: ->
-        for k,e of @entities
-            e.main()
+    # Place command to outbox
+    send: (action, data) ->
+        console.log " -> " + action + ":" + JSON.stringify( data )
+        @io.write action, data
+
+    # Connect and start main cycle
+    start: ->
+        setInterval ( => @loop() ), 100
+
+    execute: (action,data)->
+        console.log " <- " + action + ":" + JSON.stringify( data )
+        try
+            @executor[ action ]( data )
+            return true
+        catch error
+            console.log "ERROR: action=#{action} Error:#{error}"
+            return false
+
+    # Main cycle 
+    loop: ->
+        @tick += 1
+        @execute action, data for [action, data] in @io.read()
+        e.main() for k,e of @entities
+        @io.flush()
 Global.World = World
 
