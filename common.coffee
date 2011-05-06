@@ -64,13 +64,13 @@ class Connection extends Observable
     ret
 Global.Connection = Connection
 
-ENTITY_LAST_ID=1
+ENTITY_LAST_ID=0
 
 # World object
 class Entity
-    constructor: (@world) ->
-        @id = ENTITY_LAST_ID
-        ENTITY_LAST_ID += 1
+    constructor: (@world, id) ->
+        if not id then ENTITY_LAST_ID += 1
+        @id = id or ENTITY_LAST_ID
         @view = world.view?.set()
 
     create: (@x,@y) ->
@@ -113,7 +113,7 @@ class Executor
 
     create: (data)->
         e = new Global[data.entity](@world)
-        e.create data.x, data.y
+        e.create data.x, data.y, data.id
         @world.entities[ e.id ] = e
 
     move: (data)->
