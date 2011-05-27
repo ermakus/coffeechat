@@ -1,2 +1,17 @@
 #toolbar
 #content
+
+#login-dialog(class="dialog")
+    p Enter your nickname
+    input#login-name( type="text" )
+    .row
+        input#login-ok( type="button", value="OK" )
+        input.cancel( type="button", value="Cancel" )
+
+#upload-dialog(class="dialog")
+    p Upload image to server
+    form#upload-form( method="post", enctype="multipart/form-data", action="/upload" )
+        input#upload-file( type="file", name="image")
+    .row
+        input#upload-ok( type="button", value="Upload")
+        input.cancel( type="button", value="Cancel")

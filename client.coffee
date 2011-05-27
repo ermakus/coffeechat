@@ -30,13 +30,14 @@ class Tool
             for tool in @toolbar.tools
                 tool.deselect()
             @select()
-            @toolbar.tool = this
 
     select: ->
         @elem.css('background-color':'#8888FF')
+        @toolbar.tool = this
 
     deselect: ->
         @elem.css('background-color':'transparent')
+        @toolbar.tool = undefined
 
     click: (x,y) ->
     release: (x,y) ->
@@ -77,13 +78,37 @@ class ImageTool extends Tool
     release: (x,y) ->
         @toolbar.world.send "create", {'entity':'Entity','x':@x,'y':@y, 'width':x-@x, 'height':y-@y }
         @toolbar.world.render.remove( @area )
+        @deselect()
+
+class UploadTool extends Tool
+    constructor: (toolbar)->
+        super( toolbar, 'upload')
+
+    select: ->
+        $('#upload-dialog').dialog('open')
+        $('#upload-ok').click ->
+            $('#upload-form').submit()
+
+class LoginTool extends Tool
+    constructor: (toolbar)->
+        super( toolbar, 'login')
+
+    select: ->
+        $('#login-dialog').dialog('open')
+        $('#login-ok').click =>
+            nick = $('#login-name').attr('value').trim()
+            if nick  != ""
+                @toolbar.world.send "login", {nick,"id":@toolbar.world.userId}
+                $(".dialog").dialog('close')
 
 class Toolbar
     constructor: ( id, @world ) ->
         @elem = $('#'+id)
         @tools = []
+        @tools.push( new LoginTool( this ) )
         @tools.push( new SelectTool( this ) )
         @tools.push( new ImageTool( this ) )
+        @tools.push( new UploadTool( this ) )
 
         content = $('#' + @world.container )
         content.bind "mousedown", (e) =>
@@ -115,7 +140,7 @@ class ClientWorld extends window.Global.World
         @render = new DOMRender(@container)
         @socket = new io.Socket()
         @observe "connect", =>
-            @id = @socket.transport.sessionid
+            @userId = @socket.transport.sessionid
             console.log( "Connected: " + @id )
         @observe 'disconnect', =>
             console.log( "Disconnected: " + @id )
@@ -137,6 +162,8 @@ class ClientWorld extends window.Global.World
 
 # Entry point
 $(document).ready ->
+    $('.cancel').click -> $(".dialog").dialog('close')
+    $('.dialog').dialog({ autoOpen: false })
     world = new ClientWorld( 'content' )
     toolbar = new Toolbar( 'toolbar', world )
     world.start()

@@ -62,6 +62,16 @@ class Entity
 
 Global.Entity = Entity
 
+class Avatar extends Entity
+    create: (@x,@y,@width,@height) ->
+        @elem = @world.render.image( @x, @y, @width, @height, 'anon.png' )
+
+    login: (@name) ->
+        @world.render.remove( @elem )
+        @elem = @world.render.image( @x, @y, @width, @height, 'avatar.png' )
+
+Global.Avatar = Avatar
+
 class Render
     image: (x,y,src) ->
     rect: (x,y,width,height) ->
@@ -77,17 +87,25 @@ class Executor
     create: (data)->
         e = new Global[data.entity](@world, data.id )
         e.create data.x, data.y, data.width, data.height
-        @world.entities[ e.id ] = e
-        @world.entitiesCount += 1
+        @world.push( e )
 
     move: (data)->
         @world.entities[ data.id ].move( data.dx, data.dy )
 
     connect: (data) ->
         console.log "User #{data.id} connected"
+        e = new Avatar(@world,data.id)
+        e.create( 100,100,32,32 )
+        @world.push e
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
+        @world.entities[ data.id ].remove()
+
+    # Called when user submit login form
+    login: (data)->
+        @world.entities[ data.id ].login( data.login )
+
 Global.Executor = Executor
 
 # Main class that incapsulate all other objects
@@ -111,6 +129,10 @@ class World extends Observable
         ret = @inbox
         @inbox = []
         ret
+
+    push: (e)->
+        @entities[ e.id ] = e
+        @entitiesCount += 1
 
     # Find object by location
     find: (x,y) ->

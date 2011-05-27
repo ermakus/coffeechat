@@ -1,12 +1,15 @@
-express = require('express')
 pub     = __dirname + '/public'
+express = require('express')
 lib     = require "./common"
+form    = require('connect-form')
+fs      = require('fs')
 
 class ServerWorld extends lib.World
     constructor: ->
         super()
 
         @app = express.createServer(
+            form({ keepExtensions: true }),
             express.compiler({ src: pub, enable: ['sass'] }),
             express.static(pub),
             express.logger(),
@@ -21,6 +24,23 @@ class ServerWorld extends lib.World
         @app.get '/common.js', (req, res) ->
             res.sendfile 'common.js'
 
+        @app.post '/upload', (req, res, next) ->
+
+            req.form.complete (err, fields, files) ->
+                console.log 'Uploaded %s to %s', files.image.filename, files.image.path
+                if err
+                    res.writeHead(500,{})
+                    res.write(err.message)
+                else
+                    fs.renameSync files.image.path, pub + "/upload/" + files.image.filename
+                    res.writeHead(200, {})
+                    res.write("/upload/" + files.image.filename )
+                res.end()
+   
+            req.form.on 'progress', (bytesReceived, bytesExpected) ->
+                percent = (bytesReceived / bytesExpected * 100) | 0
+                console.log 'Uploading: %' + percent
+
         @app.listen(process.env.PORT || 8000)
 
         @clients = {}
@@ -28,26 +48,29 @@ class ServerWorld extends lib.World
         @socket = require('socket.io').listen @app
 
         @socket.on 'connection', (client) =>
-            @clients[ client.sessionId ] = client
-            @trigger 'connect', client.sessionId
+            sid = client.sessionId
+            @clients[ sid ] = client
+            @trigger 'connect', sid
             client.on 'message', (message) =>
                 json = JSON.parse(message)
                 @inbox = @inbox.concat json
                 @trigger 'message', json
             client.on 'disconnect', =>
-                @trigger 'disconnect', client.sessionId
-                delete @clients[client.sessionId]
+                @trigger 'disconnect', sid
+                delete @clients[sid]
 
         @observe 'connect', (id)=>
-            console.log @entitiesCount
             @clients[id].send(
                 JSON.stringify(
-                    ['create',{'entity':ent.className(),'id':ent.id,'x':ent.x,'y':ent.y, 'width':ent.width, 'height':ent.height } ] for id, ent of @entities
+                    ['create',{'entity':ent.className(),'id':ent.id,'x':ent.x,'y':ent.y, 'width':ent.width, 'height':ent.height } ] for i, ent of @entities
                 )
             ) if @entitiesCount
+            @send "connect", {id}
+            @executor.connect {id}
 
         @observe 'disconnect', (id)=>
-                @send 'disconnect', {'id':id }
+                @send 'disconnect', {id}
+                @executor.disconnect {id}
 
     socket_send: (json)->
         @socket.broadcast json
