@@ -1,7 +1,118 @@
 # Client socket.io connection
-class ClientConnection extends window.Global.Connection
-    constructor: ->
+
+class DOMRender extends window.Global.Render
+
+    constructor: ( id )->
+        @container = $('#' + id )
+
+    image: (x,y,width,height,src) ->
+        elem = $('<img/>').css({'position':'absolute','display':'block','top':y,'left':x, width, height})
+        elem.attr('src',src)
+        elem.appendTo( @container )
+
+    rect: (x,y,width,height) ->
+        elem = $('<div/>').css({'position':'absolute','top':y,'left':x,'width':width,'height':height,'border':'solid black 1px'})
+        elem.appendTo( @container )
+
+    remove: (elem) ->
+        elem.remove()
+
+    move: (elem,x,y) ->
+        elem.css('top':y, 'left':x)
+
+    resize: (elem,width,height) ->
+        elem.css( {width, height} )
+
+class Tool
+    constructor: (@toolbar, icon)->
+        @elem = $("<img src='/cmd/#{icon}.png'/>").appendTo( @toolbar.elem )
+        @elem.click =>
+            for tool in @toolbar.tools
+                tool.deselect()
+            @select()
+            @toolbar.tool = this
+
+    select: ->
+        @elem.css('background-color':'#8888FF')
+
+    deselect: ->
+        @elem.css('background-color':'transparent')
+
+    click: (x,y) ->
+    release: (x,y) ->
+    move: (x,y) ->
+
+class SelectTool extends Tool
+    constructor: (toolbar)->
+        super( toolbar, 'select')
+
+    # Mouse click handler
+    click: (@x,@y) ->
+       @down = true
+       @toolbar.deselect()
+       @toolbar.select(x,y)
+
+    # Mouse release handler
+    release: (@x,@y) ->
+        @down = false
+
+    # Mouse move handler
+    move: (x,y) ->
+        if @down then @toolbar.world.send( "move", { "id":e.id, "dx": x - @x,  "dy": y - @y } ) for e in @toolbar.selection
+        @x = x
+        @y = y
+   
+class ImageTool extends Tool
+    constructor: (toolbar)->
+        super( toolbar, 'create')
+
+    click: (@x,@y) ->
+        @area = @toolbar.world.render.rect(@x,@y,1,1)
+
+    move: (x,y) ->
+        if @area
+            @toolbar.world.render.resize( @area, x-@x, y-@y )
+
+    # Mouse release handler
+    release: (x,y) ->
+        @toolbar.world.send "create", {'entity':'Entity','x':@x,'y':@y, 'width':x-@x, 'height':y-@y }
+        @toolbar.world.render.remove( @area )
+
+class Toolbar
+    constructor: ( id, @world ) ->
+        @elem = $('#'+id)
+        @tools = []
+        @tools.push( new SelectTool( this ) )
+        @tools.push( new ImageTool( this ) )
+
+        content = $('#' + @world.container )
+        content.bind "mousedown", (e) =>
+            @tool?.click e.pageX, e.pageY
+        content.bind "mouseup", (e) =>
+            @tool?.release e.pageX, e.pageY
+        content.bind "mousemove", (e) =>
+            @tool?.move e.pageX, e.pageY
+
+        @selection = []
+
+    # Select object by coordinate
+    select: (x,y) ->
+        @selection = @world.find(x,y)
+        for e in @selection
+            e.select()
+        @selection.length
+
+    # Deselect all objects
+    deselect: ->
+        for e in @selection
+            e.deselect()
+        @selection = []
+
+class ClientWorld extends window.Global.World
+
+    constructor: ( @container )->
         super()
+        @render = new DOMRender(@container)
         @socket = new io.Socket()
         @observe "connect", =>
             @id = @socket.transport.sessionid
@@ -21,56 +132,11 @@ class ClientConnection extends window.Global.Connection
             data = JSON.parse(json) if json
             @trigger msg, data
 
-    send: (json) ->
+    socket_send: (json) ->
         @socket.send json
-
-
-# Class to receive events from mouse/kbd and issue commands
-class Controller
-    constructor: (@world) ->
-        canvas = $('#canvas')
-        canvas.bind "mousedown", (e) =>
-            @click e.pageX, e.pageY
-        canvas.bind "mouseup", (e) =>
-            @release e.pageX, e.pageY
-        canvas.bind "mousemove", (e) =>
-            @move e.pageX, e.pageY
-        canvas.bind "keydown", (e) =>
-            alert "Down"
-
-        @selection = []
-
-    # Select object by coordinate
-    select: (x,y) ->
-        @selection = @world.find(x,y)
-        e.select() for e in @selection
-        @selection.length
-
-    # Deselect all objects
-    deselect: ->
-        e.deselect() for e in @selection
-        @selection = []
-
-    # Mouse click handler
-    click: (@x,@y) ->
-       @down = true
-       @deselect()
-       if not @select(x,y) then @world.send "create", {'entity':'Entity','x':x,'y':y }
-
-    # Mouse release handler
-    release: (@x,@y) ->
-       @down = false
-
-    # Mouse move handler
-    move: (x,y) ->
-        if @down then @world.send( "move", { "id":e.id, "dx": x - @x,  "dy": y - @y } ) for e in @selection
-        @x = x
-        @y = y
-Global.Controller = Controller
-
 
 # Entry point
 $(document).ready ->
-    world = new window.Global.World( new Raphael('canvas',window.innerWidth,window.innerHeight), new ClientConnection()  )
-    ctrl = new Controller( world )
+    world = new ClientWorld( 'content' )
+    toolbar = new Toolbar( 'toolbar', world )
     world.start()

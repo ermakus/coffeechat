@@ -20,31 +20,6 @@ class Observable
     (@_observers ||= {})[name] ||= []
 Global.Observable = Observable
 
-
-# Base client buffered connection class
-class Connection extends Observable
-
-  constructor: (@socket)->
-    @outbox = []
-    @inbox = []
-
-  send: (json) ->
-      alert "Abstract method: Connection.send"
-
-  write: (args...) ->
-    @outbox.push args
-
-  flush: ->
-    return unless @outbox.length
-    @send JSON.stringify(@outbox)
-    @outbox = []
-
-  read: ->
-    ret = @inbox
-    @inbox = []
-    ret
-Global.Connection = Connection
-
 ENTITY_LAST_ID=0
 
 # World object
@@ -52,16 +27,12 @@ class Entity
     constructor: (@world, id) ->
         if not id then ENTITY_LAST_ID += 1
         @id = id or ENTITY_LAST_ID
-        @view = world.view?.set()
 
-    create: (@x,@y) ->
-        @width = @height = 100
-        @view?.push(
-            @world.view.circle( x+50, y+50, 50 ).attr({fill: "red"})
-        )
+    create: (@x,@y,@width,@height) ->
+        @elem = @world.render.image( @x, @y, @width, @height, 'entity.png' )
 
     remove: ->
-        @view?.remove()
+        @world.render.remove( @elem )
         delete @world.entities[ @id ]
         @world.entitiesCount -= 1
 
@@ -73,30 +44,39 @@ class Entity
         (@x < x < (@x + @width)) and (@y < y < (@y + @height))
 
     select: ->
-        return if @selection
-        @selection = @world.view?.rect(@x,@y,@width,@height)
+        return if @selected
+        @selected = @world.render.rect(@x,@y,@width,@height)
 
     deselect: ->
-        return unless @selection
-        @selection.remove()
-        @selection = undefined
+        return unless @selected
+        @world.render.remove( @selected )
+        @selected = undefined
 
     move: (dx,dy) ->
-        @view?.translate(dx,dy)
-        @selection?.translate(dx,dy)
         @x += dx
         @y += dy
+        @world.render.move( @elem, @x, @y )
+        if @selected then @world.render.move( @selected, @x, @y )
 
     main: ->
+
 Global.Entity = Entity
+
+class Render
+    image: (x,y,src) ->
+    rect: (x,y,width,height) ->
+    remove: (elem) ->
+    move: (elem, x, y ) ->
+
+Global.Render = Render
 
 # Class to execute commands received from Controller or network
 class Executor
     constructor: (@world)->
 
     create: (data)->
-        e = new Global[data.entity](@world)
-        e.create data.x, data.y, data.id
+        e = new Global[data.entity](@world, data.id )
+        e.create data.x, data.y, data.width, data.height
         @world.entities[ e.id ] = e
         @world.entitiesCount += 1
 
@@ -112,11 +92,25 @@ Global.Executor = Executor
 
 # Main class that incapsulate all other objects
 class World extends Observable
-    constructor: (@view,@io) ->
+
+    constructor: ()->
+        @render = new Render()
         @tick = 0
         @entities = {}
         @entitiesCount = 0
         @executor   = new Executor(this)
+        @outbox = []
+        @inbox = []
+
+    flush: ->
+        return unless @outbox.length
+        @socket_send JSON.stringify(@outbox)
+        @outbox = []
+
+    read: ->
+        ret = @inbox
+        @inbox = []
+        ret
 
     # Find object by location
     find: (x,y) ->
@@ -128,7 +122,7 @@ class World extends Observable
     # Place command to outbox
     send: (action, data) ->
         console.log " -> " + action + ":" + JSON.stringify( data )
-        @io.write action, data
+        @outbox.push [action,data]
 
     # Connect and start main cycle
     start: ->
@@ -146,8 +140,8 @@ class World extends Observable
     # Main cycle 
     loop: ->
         @tick += 1
-        @execute action, data for [action, data] in @io.read()
+        @execute action, data for [action, data] in @read()
         e.main() for k,e of @entities
-        @io.flush()
+        @flush()
 Global.World = World
 
