@@ -6,18 +6,28 @@
 html, body {
     width: 100%;
     height: 100%;
-    background-color: gray;
     overflow: hidden;
 }
 
-#toolbar {
-    height: 5%;
+#content {
+    height: 100%;
     width: 100%;
-    background-color: #EEEEEE;
 }
 
-#content {
-    height: 95%;
+#chats {
+    float: right;
+    width: 70%;
+    height: 90%;
+    background-color: white;
+}
+
+#users {
+    float: left;
+    width: 30%;
+    height: 90%;
+    background-color: white;
+}
+
+#message {
     width: 100%;
-    background-color: #FFFFFF;
 }

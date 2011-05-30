@@ -18,6 +18,9 @@ class ServerWorld extends lib.World
         @app.get '/', (req, res) ->
             res.render 'index.jade'
 
+        @app.get '/inject.js', (req, res) ->
+            res.sendfile 'inject.js'
+
         @app.get '/client.js', (req, res) ->
             res.sendfile 'client.js'
 
@@ -53,7 +56,7 @@ class ServerWorld extends lib.World
             @trigger 'connect', sid
             client.on 'message', (message) =>
                 json = JSON.parse(message)
-                @inbox = @inbox.concat json
+                @execute json[0], json[1]
                 @trigger 'message', json
             client.on 'disconnect', =>
                 @trigger 'disconnect', sid
@@ -62,9 +65,9 @@ class ServerWorld extends lib.World
         @observe 'connect', (id)=>
             @clients[id].send(
                 JSON.stringify(
-                    ['create',{'entity':ent.className(),'id':ent.id,'x':ent.x,'y':ent.y, 'width':ent.width, 'height':ent.height } ] for i, ent of @entities
+                    ['create',ent.serialize()]
                 )
-            ) if @entitiesCount
+            ) for i, ent of @entities
             @send "connect", {id}
             @executor.connect {id}
 
@@ -79,4 +82,3 @@ class ServerWorld extends lib.World
         if super(action,data) then @send action, data
 
 world = new ServerWorld()
-world.start()
