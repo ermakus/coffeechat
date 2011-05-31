@@ -30,9 +30,15 @@ Global.Entity = class Entity
 
     create: (data) ->
         console.log "Create entity: #{@className()}::#{@id}=#{JSON.stringify( data )}"
+        if @world.view then @show()
 
     kill: ->
         console.log "Delete entity: #{@className()}::#{@id}"
+        if @world.view then @hide()
+
+    show: ->
+
+    hide: ->
 
     remove: ->
         @kill()
@@ -52,29 +58,33 @@ Global.Avatar = class Avatar extends Entity
         if @id == @world.userId then return @name + " (You)"
         return @name
 
-    create: (data) ->
-        super(data)
-        if @world.view then $('#users-list').append("<li id=#{@id}>#{@getName()}</li>")
+    show: ->
+        $('#users-list').append("<li id=#{@id} class='user'>#{@getName()}</li>")
 
-    kill: ->
-        super()
-        if @world.view then $('#' + @id).remove()
+    hide: ->
+        $('#' + @id).remove()
 
 
 Global.Message = class Message extends Entity
 
     create: (data) ->
-        super(data)
         @message = data.message
-        if @world.view then $('#chat-list').append("<li id=#{@id}>#{@message}</li>")
+        @from = data.from
+        @to = data.to
+        super(data)
 
-    kill: ->
-        super()
-        if @world.view then $('#' + @id).remove()
+    show: ->
+        @world.tab_make( @to, @to )
+        $('#content-' + @to).append("<li id=#{@id}><span>#{@from}</span>:<span>#{@message}</span></li>")
+
+    hide: ->
+        $('#' + @id).remove()
 
     serialize: ->
         data = super()
         data.message = @message
+        data.from = @from
+        data.to = @to
         return data
 
 

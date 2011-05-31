@@ -29,7 +29,7 @@ class Popup
 
 
     layout: ->
-        height = @getClientHeight() / 3
+        height = @getClientHeight() / 2
         width = @getClientWidth()
         @resize( (@getClientHeight() - height),  (@getClientWidth() - width) / 2, width, height)
 
@@ -42,8 +42,8 @@ class Popup
         @frame.style.height = @height + "px"
         @frame.style.zIndex = 9999
         @close.style.position = "fixed"
-        @close.style.top = @top + 10 + "px"
-        @close.style.left = @left + @width - 42 + "px"
+        @close.style.top = @top + 2 + "px"
+        @close.style.left = @left + @width - 32 + "px"
         @close.style.zIndex = @frame.style.zIndex + 1
 
 if not window.__popup__ then window.__popup__=new Popup( 'http://localhost:8000/', document.URL, 320, 240 )

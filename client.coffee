@@ -2,8 +2,9 @@
 
 class Client extends window.Global.World
 
-    constructor: ( @view )->
-        super( view )
+    constructor: ()->
+        super()
+        @view = true
         @observingSocket = {}
         @socket = new io.Socket()
         @observe "connect", =>
@@ -26,24 +27,51 @@ class Client extends window.Global.World
     socket_send: (json) ->
         @socket.send json
 
+
+    # Tabs
+    tab_init: (eid)->
+        @tabs = $(eid).tabs({
+            add: (event, ui) =>
+                @tabs.tabs('select', '#' + ui.panel.id)
+            , closable: true
+        })
+ 
+    tab_get_id: ->
+        $('.ui-tabs-selected a').attr('href')[1..]
+
+    tab_make: (id, name) ->
+        if $('#'+id).length == 0
+            @tabs.tabs('add', "#" + id, name )
+            $('#'+id).html("<ul id='content-#{id}'/>")
+
+    # Layout
+    layout_init: ->
+        $('body').layout({
+            west__size: 300,
+            west__onresize: @layout_update
+        })
+        $('#accordion').accordion( { fillSpace:true } )
+        setTimeout @layout_update, 200
+
+    layout_update: ->
+        $('#accordion').accordion( "resize" )
+
+    private_chat: (uid) ->
+        @tab_make( 'chat-' + uid, @get( uid ).getName() )
+
     message: (msg) ->
-        @send 'create', {'entity':'Message','message':msg}
-
-
-update_layout = ->
-    $('#accordion').accordion( "resize" )
+        @send 'create', {'entity':'Message','message':msg,'from': @get( @userId ).getName(),'to':@tab_get_id() }
 
 # Entry point
 $(document).ready ->
-    $('body').layout({
-        west__size: 300,
-        west__onresize: update_layout
-    })
-    $('#content').tabs()
-    $('#accordion').accordion( { fillSpace:true } )
-    setTimeout update_layout, 200
 
-    client = new Client( $('#users-list') )
+    client = new Client()
+    client.layout_init()
+    client.tab_init('#content')
+    client.tab_make('public','Public')
+
+    $('.user').live "click", ->
+        client.private_chat( $(this).attr('id') )
 
     $('#message').bind "keypress", (e) ->
         code = if e.keyCode then e.keyCode else e.which
