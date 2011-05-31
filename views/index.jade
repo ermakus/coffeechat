@@ -1,10 +1,22 @@
-#content
-    #chats
-        p Chat
-        ul#chat-list
+#users.ui-layout-west
+    #accordion.basic
+        h1
+            a( href="#" ) Users
+        div
+            ul#users-list
+        h1
+            a( href="#") Content
+        div
+            ul#Content-list
 
-    #users
-        p Users
-        ul#users-list
+#content.ui-layout-center( style="display: none" )
+    ul( style="-moz-border-radius-bottomleft: 0; -moz-border-radius-bottomright: 0;" )
+        li
+            a( href="#public" )
+                span Public
+    div( class="ui-layout-content ui-widget-content ui-corner-bottom")
+        #public
+            ul#chat-list
 
+#footer.ui-layout-south
     input#message( type="text" )

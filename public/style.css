@@ -1,33 +1,49 @@
+@import "layout-default.css";
+
 * {
    padding: 0px;
    margin: 0px;
+   border: 0;
+   font-size: 100%;
+   font: inherit;
+   vertical-align: baseline;
 }
 
 html, body {
+   font-size: 12px;    
     width: 100%;
     height: 100%;
+    background-color: white;
+    position: absolute;
+}
+
+
+.ui-layout-center, .ui-layout-west, .ui-layout-south {
+    padding: 0px;
     overflow: hidden;
 }
 
-#content {
-    height: 100%;
-    width: 100%;
+.ui-layout-center {
+    line-height:1.4em;
+    margin:	0; /* remove top/bottom margins from <P> used as content-div */
 }
 
-#chats {
-    float: right;
-    width: 70%;
-    height: 90%;
-    background-color: white;
+h1, h2 {
+    font-size:		1.1em;
+    background:		#EEF;
+    border:		1px solid #BBB;
+    border-width:	0 0 1px;
+    padding:		7px 10px;
+    margin:		0;
 }
 
-#users {
-    float: left;
-    width: 30%;
-    height: 90%;
-    background-color: white;
+#footer {
+    height: 20px;
 }
 
 #message {
+    border: solid 1px;
+    padding: 2px;
     width: 100%;
+    height: 100%;
 }

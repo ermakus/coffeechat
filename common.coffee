@@ -36,8 +36,7 @@ Global.Entity = class Entity
 
     remove: ->
         @kill()
-        delete @world.entities[ @id ]
-        @world.entitiesCount -= 1
+        @world.remove( this )
 
     className: ->
         results = (/function (.{1,})\(/).exec((this).constructor.toString())
@@ -57,8 +56,8 @@ Global.Avatar = class Avatar extends Entity
         super(data)
         if @world.view then $('#users-list').append("<li id=#{@id}>#{@getName()}</li>")
 
-    kill: (data) ->
-        super(data)
+    kill: ->
+        super()
         if @world.view then $('#' + @id).remove()
 
 
@@ -69,8 +68,8 @@ Global.Message = class Message extends Entity
         @message = data.message
         if @world.view then $('#chat-list').append("<li id=#{@id}>#{@message}</li>")
 
-    kill: (data) ->
-        super(data)
+    kill: ->
+        super()
         if @world.view then $('#' + @id).remove()
 
     serialize: ->
@@ -86,22 +85,17 @@ Global.Executor = class Executor
     create: (data)->
         e = new Global[data.entity](@world, data.id )
         e.create data
-        @world.push( e )
+        @world.add e
 
     connect: (data) ->
         console.log "User #{data.id} connected"
         e = new Avatar(@world,data.id)
         e.create( data )
-        @world.push e
+        @world.add e
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
         @world.entities[ data.id ].remove()
-
-    message: (data)->
-        e = new Message(@world)
-        e.create( data )
-        @world.push e
 
 # Main class that incapsulate all other objects
 Global.World = class World extends Observable
@@ -111,11 +105,17 @@ Global.World = class World extends Observable
         @entitiesCount = 0
         @executor  = new Executor(this)
 
-    push: (e)->
+    add: (e)->
         @entities[ e.id ] = e
         @entitiesCount += 1
 
-    # Place command to outbox
+    remove: (e)->
+        delete @entities[ e.id ]
+        @entitiesCount -= 1
+
+    get: (id) ->
+        return @entities[ id ]
+
     send: (action, data) ->
         console.log " -> " + action + ":" + JSON.stringify( data )
         @socket_send JSON.stringify([action,data])
