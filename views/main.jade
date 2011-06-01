@@ -1,0 +1,17 @@
+#users.ui-layout-west
+    #accordion.basic
+        h1
+            a( href="#" ) Users
+        div
+            ul#users-list
+        h1
+            a( href="#") Content
+        div
+            ul#Content-list
+
+#content.ui-layout-center( style="display: none" )
+    h1 #{url}
+    #chats
+        ul( style="-moz-border-radius-bottomleft: 0; -moz-border-radius-bottomright: 0;" )
+    #controls
+        input#message( type="text" )

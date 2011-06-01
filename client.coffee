@@ -1,6 +1,6 @@
 # Client socket.io connection
 
-class Client extends window.Global.World
+class Client extends window.Model
 
     constructor: ()->
         super()

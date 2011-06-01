@@ -3,8 +3,10 @@ express = require('express')
 lib     = require "./common"
 form    = require('connect-form')
 fs      = require('fs')
+            
+BAD_BROWSER = /(MSIE 6)|(MSIE 5)|(MSIE 4)/g
 
-class ServerWorld extends lib.World
+class Server extends lib.Model
     constructor: ->
         super()
 
@@ -16,16 +18,29 @@ class ServerWorld extends lib.World
             express.errorHandler({ dumpExceptions: true, showStack: true }))
 
         @app.get '/', (req, res) ->
-            res.render 'index.jade'
+            bookmarklet = "javascript:(function(){document.body.appendChild(document.createElement('script')).src='#{lib.BASE_URL}/js/inject.js';})();"
+            res.render 'index.jade', { 'title': 'Inject chat to any site', 'scripts': [], bookmarklet }
 
-        @app.get '/inject.js', (req, res) ->
-            res.sendfile 'inject.js'
-
-        @app.get '/client.js', (req, res) ->
-            res.sendfile 'client.js'
-
-        @app.get '/common.js', (req, res) ->
-            res.sendfile 'common.js'
+        @app.get '/main', (req, res) ->
+            browser = req.header('User-Agent')
+            url = req.param('url','default')
+            if not browser or browser.match( BAD_BROWSER )
+                res.render 'badagent.jade', { 'title': 'Your browser too old', 'scripts': [] }
+            else
+                res.render 'main.jade', {
+                    'title': 'Chat room',
+                    'scripts': [
+                        "/socket.io/socket.io.js",
+                        "/js/jquery-1.5.1.min.js",
+                        "/js/jquery-ui-1.8.13.custom.min.js",
+                        '/js/jquery.layout.js',
+                        '/js/ui.tabs.closable.min.js',
+                        '/js/json2.js',
+                        '/js/common.js',
+                        "/js/client.js"
+                    ],
+                    'url': url
+                }
 
         @app.post '/upload', (req, res, next) ->
 
@@ -81,4 +96,4 @@ class ServerWorld extends lib.World
     execute: (action, data) ->
         if super(action,data) then @send action, data
 
-world = new ServerWorld()
+model = new Server()

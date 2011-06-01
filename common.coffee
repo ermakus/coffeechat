@@ -1,15 +1,19 @@
-if process?
-  Global = exports
+if window?
+    # Export namespace for browser
+    exports = window
+    # Stubs for old browsers
+    window.console ||= {}
+    window.console[fn] ||= (->) for fn in ['log', 'dir', 'error', 'warn']
 else
-  Global = window.Global = {}
-  window.console ||= {}
-  window.console[fn] ||= (->) for fn in ['log', 'dir', 'error', 'warn']
+    exports = module.exports
 
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
 
+exports.BASE_URL = "http://192.168.122.1:8000"
+
 # Observer pattern
-class Observable
+exports.Observable = class Observable
   observe: (name, fn) ->
     @observers(name).push fn
 
@@ -18,23 +22,22 @@ class Observable
 
   observers: (name) ->
     (@_observers ||= {})[name] ||= []
-Global.Observable = Observable
 
 ENTITY_LAST_ID=0
 
-# World object
-Global.Entity = class Entity
-    constructor: (@world, id) ->
+# Base object contained in model
+exports.Entity = class Entity
+    constructor: (@model, id) ->
         if not id then ENTITY_LAST_ID += 1
         @id = id or ENTITY_LAST_ID
 
     create: (data) ->
         console.log "Create entity: #{@className()}::#{@id}=#{JSON.stringify( data )}"
-        if @world.view then @show()
+        if @model.view then @show()
 
     kill: ->
         console.log "Delete entity: #{@className()}::#{@id}"
-        if @world.view then @hide()
+        if @model.view then @hide()
 
     show: ->
 
@@ -42,7 +45,7 @@ Global.Entity = class Entity
 
     remove: ->
         @kill()
-        @world.remove( this )
+        @model.remove( this )
 
     className: ->
         results = (/function (.{1,})\(/).exec((this).constructor.toString())
@@ -51,11 +54,11 @@ Global.Entity = class Entity
     serialize: ->
         return { 'entity':@className(), 'id':@id }
 
-Global.Avatar = class Avatar extends Entity
+exports.Avatar = class Avatar extends Entity
 
     getName: ->
         @name ||= "Anonymous"
-        if @id == @world.userId then return @name + " (You)"
+        if @id == @model.userId then return @name + " (You)"
         return @name
 
     show: ->
@@ -65,7 +68,7 @@ Global.Avatar = class Avatar extends Entity
         $('#' + @id).remove()
 
 
-Global.Message = class Message extends Entity
+exports.Message = class Message extends Entity
 
     create: (data) ->
         @message = data.message
@@ -74,7 +77,7 @@ Global.Message = class Message extends Entity
         super(data)
 
     show: ->
-        @world.tab_make( @to, @to )
+        @model.tab_make( @to, @to )
         $('#content-' + @to).append("<li id=#{@id}><span>#{@from}</span>:<span>#{@message}</span></li>")
 
     hide: ->
@@ -89,26 +92,26 @@ Global.Message = class Message extends Entity
 
 
 # Class to execute commands received from Controller or network
-Global.Executor = class Executor
-    constructor: (@world)->
+exports.Executor = class Executor
+    constructor: (@model)->
 
     create: (data)->
-        e = new Global[data.entity](@world, data.id )
+        e = new exports[data.entity](@model, data.id )
         e.create data
-        @world.add e
+        @model.add e
 
     connect: (data) ->
         console.log "User #{data.id} connected"
-        e = new Avatar(@world,data.id)
+        e = new Avatar(@model,data.id)
         e.create( data )
-        @world.add e
+        @model.add e
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
-        @world.entities[ data.id ].remove()
+        @model.entities[ data.id ].remove()
 
 # Main class that incapsulate all other objects
-Global.World = class World extends Observable
+exports.Model = class Model extends Observable
 
     constructor: (@view)->
         @entities = {}

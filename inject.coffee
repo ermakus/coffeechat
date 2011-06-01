@@ -1,3 +1,5 @@
+BASE_URL = "http://192.168.122.1:8000/"
+
 class Popup
     constructor: (@base, @url, width, height) ->
         @close = document.createElement 'img'
@@ -12,7 +14,10 @@ class Popup
 
         @hbar.onmousedown = (e) =>
             @iframe.style.display = "none"
-            e.preventDefault()
+            if e
+                e.preventDefault()
+            else
+                event.returnValue = false
 
         @addEvent document, "mouseup", (e) =>
             @moveY = undefined
@@ -34,7 +39,7 @@ class Popup
         @iframe = document.createElement 'iframe'
         @iframe.setAttribute 'width', '100%'
         @iframe.setAttribute 'height', '100%'
-        @iframe.setAttribute 'src',  @base + "?url=" + @url
+        @iframe.setAttribute 'src', @base + "main?url=" + encodeURI( @url )
         @iframe.setAttribute 'frameborder', 'no'
         @frame.appendChild @iframe
 
@@ -63,13 +68,11 @@ class Popup
         @resize( (@getClientHeight() - @height),  (@getClientWidth() - @width) / 2, @width, @height)
 
     initStyle: ->
-        @frame.style.position = "fixed"
+        @frame.style.position = @hbar.style.position = @close.style.position = "fixed"
         @frame.style.border = "none"
         @frame.style.zIndex = 9999
         @frame.style.background = "#DDD"
-        @close.style.position = "fixed"
         @close.style.zIndex = @frame.style.zIndex + 1
-        @hbar.style.position = "fixed"
         @hbar.style.background = "#DDD"
         @hbar.style.border = "1px solid #BBB"
         @hbar.style.left = 0
@@ -92,4 +95,4 @@ class Popup
         @close.style.top = @top + 2 + "px"
         @close.style.left = @left + @width - 32 + "px"
 
-if not window.__popup__ then window.__popup__=new Popup( 'http://localhost:8000/', document.URL, 320, 240 )
+if not window.__popup__ then window.__popup__=new Popup( BASE_URL, document.URL, 320, 240 )
