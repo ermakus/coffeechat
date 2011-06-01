@@ -10,7 +10,7 @@
 }
 
 html, body {
-   font-size: 12px;    
+    font-size: 10px;
     width: 100%;
     height: 100%;
     background-color: white;
@@ -26,6 +26,10 @@ html, body {
 .ui-layout-center {
     line-height:1.4em;
     margin:	0; /* remove top/bottom margins from <P> used as content-div */
+}
+
+#public, #content-public {
+    overflow-y: auto;
 }
 
 h1, h2 {
