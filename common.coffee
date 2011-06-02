@@ -10,7 +10,7 @@ else
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
 
-exports.BASE_URL = "http://192.168.122.1:8000"
+exports.BASE_URL = "http://10.2.45.77:8000"
 
 # Observer pattern
 exports.Observable = class Observable
@@ -56,13 +56,25 @@ exports.Entity = class Entity
 
 exports.Avatar = class Avatar extends Entity
 
-    getName: ->
-        @name ||= "Anonymous"
-        if @id == @model.userId then return @name + " (You)"
-        return @name
+    create: (data) ->
+        @name = data.name || "anon-" + @id
+        @status = data.status || "online"
+        @refs = data.refs || []
+        super(data)
+
+    serialize: ->
+        data = super()
+        data.name = @name
+        data.status = @status
+        data.refs = @refs
+        return data
 
     show: ->
-        $('#users-list').append("<li id=#{@id} class='user'>#{@getName()}</li>")
+        html = $("<li id=#{@id} class='user #{@status} #{if @model.userId == @id then "me" else "not-me"}'>#{@name}</li>")
+        if $('#' + @id ).length > 0
+            $('#' + @id ).replaceWith( html )
+        else
+            $('#users-list').append( html )
 
     hide: ->
         $('#' + @id).remove()
@@ -72,13 +84,17 @@ exports.Message = class Message extends Entity
 
     create: (data) ->
         @message = data.message
-        @from = data.from
-        @to = data.to
+        @from = @model.get( data.from )
+        if data.to == "public"
+            @to = {'id':'public','name':'Public', 'refs':[] }
+        else
+            @to = @model.get( data.to )
+        @from.refs.push(@id)
         super(data)
 
     show: ->
-        @model.tab_make( @to, @to )
-        $('#content-' + @to).append("<li id=#{@id}><span>#{@from}</span>:<span>#{@message}</span></li>")
+        @model.view.tabMake( @to.id, @to.name )
+        $('#content-' + @to.id).append("<li id=#{@id}><span>#{@from.name}</span>:<span>#{@message}</span></li>")
 
     hide: ->
         $('#' + @id).remove()
@@ -86,8 +102,8 @@ exports.Message = class Message extends Entity
     serialize: ->
         data = super()
         data.message = @message
-        data.from = @from
-        data.to = @to
+        data.from = @from.id
+        data.to = @to.id
         return data
 
 
@@ -108,30 +124,38 @@ exports.Executor = class Executor
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
-        @model.entities[ data.id ].remove()
+        avatar = @model.entities[ data.id ]
+        if avatar.refs.length > 0
+            avatar.status = "offline"
+            avatar.show() if @model.view
+        else
+            avatar.remove()
 
 # Main class that incapsulate all other objects
 exports.Model = class Model extends Observable
 
     constructor: (@view)->
         @entities = {}
+        @indexes = {}
         @entitiesCount = 0
         @executor  = new Executor(this)
 
     add: (e)->
         @entities[ e.id ] = e
+        idx = (@indexes[ e.className() ] ||= {})
+        idx[ e.id ]  = e
         @entitiesCount += 1
 
     remove: (e)->
         delete @entities[ e.id ]
+        delete @indexes[ e.className() ][ e.id ]
         @entitiesCount -= 1
 
     get: (id) ->
         return @entities[ id ]
 
     send: (action, data) ->
-        console.log " -> " + action + ":" + JSON.stringify( data )
-        @socket_send JSON.stringify([action,data])
+        throw "Model.send: Virtual method called"
 
     execute: (action,data)->
         console.log " <- " + action + ":" + JSON.stringify( data )

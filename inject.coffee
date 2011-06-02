@@ -1,4 +1,4 @@
-BASE_URL = "http://192.168.122.1:8000/"
+BASE_URL = "http://10.2.45.77:8000/"
 
 class Popup
     constructor: (@base, @url, width, height) ->

@@ -8,7 +8,7 @@ BAD_BROWSER = /(MSIE 6)|(MSIE 5)|(MSIE 4)/g
 
 class Server extends lib.Model
     constructor: ->
-        super()
+        super( null )
 
         @app = express.createServer(
             form({ keepExtensions: true }),
@@ -78,11 +78,8 @@ class Server extends lib.Model
                 delete @clients[sid]
 
         @observe 'connect', (id)=>
-            @clients[id].send(
-                JSON.stringify(
-                    ['create',ent.serialize()]
-                )
-            ) for i, ent of @entities
+            for etype in ["Avatar","Message"]
+                @send( 'create', ent.serialize(), id ) for i, ent of @indexes[ etype ]
             @send "connect", {id}
             @executor.connect {id}
 
@@ -90,8 +87,11 @@ class Server extends lib.Model
                 @send 'disconnect', {id}
                 @executor.disconnect {id}
 
-    socket_send: (json)->
-        @socket.broadcast json
+    send: (action, data, client)->
+        if client
+            @clients[ client ].send JSON.stringify([action,data])
+        else
+            @socket.broadcast JSON.stringify([action,data])
 
     execute: (action, data) ->
         if super(action,data) then @send action, data

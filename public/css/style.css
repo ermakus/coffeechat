@@ -69,6 +69,17 @@ h1, h2 {
     text-align: center;
 }
 
+.online {
+    color: green;
+}
+
+.offline {
+    color: red;
+}
+
+.me {
+    font-weight: bold;
+}
 
 #links {
     height: 120px;
