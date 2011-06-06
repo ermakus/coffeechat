@@ -8,8 +8,10 @@ BAD_BROWSER = /(MSIE 6)|(MSIE 5)|(MSIE 4)/g
 
 class Server extends lib.Model
     constructor: ->
+        # Server model has null view
         super( null )
 
+        # Create express HTTP server
         @app = express.createServer(
             form({ keepExtensions: true }),
             express.compiler({ src: pub, enable: ['sass'] }),
@@ -17,11 +19,14 @@ class Server extends lib.Model
             express.logger(),
             express.errorHandler({ dumpExceptions: true, showStack: true }))
 
+        # Home page
         @app.get '/', (req, res) ->
             bookmarklet = "javascript:(function(){document.body.appendChild(document.createElement('script')).src='#{lib.BASE_URL}/js/inject.js';})();"
             res.render 'index.jade', { 'title': 'Inject chat to any site', 'scripts': [], bookmarklet }
 
+        # Main GUI
         @app.get '/main', (req, res) ->
+            # Check for old browsers
             browser = req.header('User-Agent')
             url = req.param('url','default')
             if not browser or browser.match( BAD_BROWSER )
@@ -42,6 +47,7 @@ class Server extends lib.Model
                     'url': url
                 }
 
+        # Upload file handler
         @app.post '/upload', (req, res, next) ->
 
             req.form.complete (err, fields, files) ->
@@ -59,41 +65,64 @@ class Server extends lib.Model
                 percent = (bytesReceived / bytesExpected * 100) | 0
                 console.log 'Uploading: %' + percent
 
-        @app.listen(process.env.PORT || 8000)
-
-        @clients = {}
-
+        # Create socket.io
         @socket = require('socket.io').listen @app
 
+        # socket.io connection handlers
         @socket.on 'connection', (client) =>
             sid = client.sessionId
-            @clients[ sid ] = client
-            @trigger 'connect', sid
+            # Fire connect event
+            @trigger 'connect', sid, client
+
+            # Message handler
             client.on 'message', (message) =>
-                json = JSON.parse(message)
-                @execute json[0], json[1]
-                @trigger 'message', json
+                @trigger 'message', JSON.parse(message)
+            # Disconnect handler
             client.on 'disconnect', =>
                 @trigger 'disconnect', sid
-                delete @clients[sid]
 
-        @observe 'connect', (id)=>
-            for etype in ["Avatar","Message"]
-                @send( 'create', ent.serialize(), id ) for i, ent of @indexes[ etype ]
-            @send "connect", {id}
-            @executor.connect {id}
+        # Connect event handler
+        @observe 'connect', (id,socket)=>
+            # Handle connect at server model
+            @controller.connect {id}
+            @get( id ).socket = socket
+            # Send model to connected avatar
+            for etype in ["Channel","Avatar","Message"]
+                for i, ent of @indexes[ etype ]
+                    @send ent.serialize {'action':'create','avatar':id}
+            # Broadcast connect event
+            @send {"action":"connect",id}
 
         @observe 'disconnect', (id)=>
-                @send 'disconnect', {id}
-                @executor.disconnect {id}
+                # Handle at server
+                @controller.disconnect {id}
+                # Broadcast disconnect event
+                @send {'action':'disconnect',id}
 
-    send: (action, data, client)->
-        if client
-            @clients[ client ].send JSON.stringify([action,data])
-        else
-            @socket.broadcast JSON.stringify([action,data])
+        # Handle incoming event
+        @observe 'message', (data)=>
+            if @execute( data ) then @send data
 
-    execute: (action, data) ->
-        if super(action,data) then @send action, data
 
+        # Start server
+        @app.listen(process.env.PORT || 8000)
+
+
+    # Send event
+    send: (data)->
+        console.log " -> " + JSON.stringify data
+        # Send to avatar
+        if data.avatar?
+            @get( data.avatar ).socket.send JSON.stringify(data)
+            return
+        # Send to channel
+        if data.channel?
+            for avatar in @get( data.channel ).links()
+                console.log "SEND TO AVATAR" + avatar.id
+                avatar.socket.send JSON.stringify(data)
+            return
+         # Send to all
+        @socket.broadcast JSON.stringify(data)
+
+# Create server and run
 model = new Server()

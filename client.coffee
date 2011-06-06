@@ -1,5 +1,4 @@
-# Client socket.io connection
-
+# Client model
 class Client extends window.Model
 
     constructor: ()->
@@ -12,7 +11,7 @@ class Client extends window.Model
         @observe 'disconnect', =>
             console.log( "Disconnected: " + @userId )
         @observe 'message', (data) =>
-            @execute data[0], data[1]
+            @execute data
         @socket.connect()
 
     observe: (msg, fn) ->
@@ -23,23 +22,64 @@ class Client extends window.Model
             data = JSON.parse(json) if json
             @trigger msg, data
 
-    send: (action,data) ->
-        @execute action,data
-        @socket.send JSON.stringify([action,data])
+    send: (data) ->
+        @socket.send JSON.stringify(data)
 
     privateChat: (uid) ->
-        @view.tabMake( uid, @get( uid ).name )
+        @send {'action':'create','entity':'Channel','name':@get(uid).name,'refs':[@userId,uid] }
 
     message: (msg) ->
-        @send 'create', {'entity':'Message','message':msg,'from':@userId,'to':@view.tabId() }
+        @send {'action':'create','entity':'Message','message':msg,'from':@get(@userId).name,'channel':@view.tabId() }
 
+class View
+    constructor:(@entity)->
+        entity.observe 'remove', => @remove()
+
+    remove: ->
+        $('#' + entity.id ).remove()
+
+window.AvatarView = class AvatarView extends View
+    constructor:(@entity)->
+        super(entity)
+        html = $("<li id=#{entity.id} class='avatar #{entity.status} #{if @entity.model.userId == entity.id then "me" else "not-me"}'>#{entity.name}</li>")
+        if $('#' + entity.id ).length > 0
+            $('#' + entity.id ).replaceWith( html )
+        else
+            $('#users-list').append( html )
+
+window.MessageView = class MessageView extends View
+    constructor:(@entity)->
+        super(entity)
+        html = $("<li class='message' id=#{entity.id}><span class='message-from'>#{entity.from}</span>:&nbsp;<span class='message-message'>#{entity.message}</span></li>")
+        if $('#' + entity.id).length
+            $('#' + entity.id ).replaceWith( html )
+        else
+            $('#content-' + entity.channel.id).append( html )
+
+window.ChannelView = class ChannelView extends View
+    constructor:(@entity)->
+        super(entity)
+        tid = '#tab-' + entity.id
+        if $(tid).length == 0
+            $('#content').tabs('add', tid, entity.name )
+            $(tid).html("<ul id='content-#{entity.id}'/>")
+
+    renove: ->
+        tid = '#tab-' + @entity.id
+        $(tid).remove()
+
+# Client GUI
 class GUI
     constructor: (@model)->
         @layoutInit()
-        @tabInit('#content')
-        @tabMake('public','Public')
 
-        $('.user').live "click", ->
+        tabs = $('#content').tabs({
+            add: (event, ui) =>
+                tabs.tabs('select', '#' + ui.panel.id)
+            , closable: true
+        })
+
+        $('.avatar').live "click", ->
             model.privateChat( $(this).attr('id') )
 
         $('#message').bind "keypress", (e) ->
@@ -48,22 +88,12 @@ class GUI
                 model.message( $(this).attr('value') )
                 $(this).attr('value','')
 
-    # Tabs
-    tabInit: (eid)->
-        @tabs = $(eid).tabs({
-            add: (event, ui) =>
-                @tabs.tabs('select', '#' + ui.panel.id)
-            , closable: true
-        })
- 
+
+    create: (entity) ->
+        return new window[ entity.className() + "View" ](entity)
+
     tabId: ->
         $('.ui-tabs-selected a').attr('href')[5..]
-
-    tabMake: (id, name) ->
-        tid = '#tab-' + id
-        if $(tid).length == 0
-            @tabs.tabs('add', tid, name )
-            $(tid).html("<ul id='content-#{id}'/>")
 
     # Layout
     layoutInit: ->
@@ -77,6 +107,13 @@ class GUI
     layoutUpdate: ->
         $('#accordion').accordion( "resize" )
 
+
+    userMake: (avatar) ->
+
+    messageMake: (message) ->
+
+    remove: (id) ->
+        $('#' + id).remove()
 
 # Entry point
 $(document).ready ->

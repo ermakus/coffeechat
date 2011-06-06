@@ -7,10 +7,10 @@ if window?
 else
     exports = module.exports
 
+exports.BASE_URL = "http://localhost:8000"
+
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
-
-exports.BASE_URL = "http://10.2.45.77:8000"
 
 # Observer pattern
 exports.Observable = class Observable
@@ -26,110 +26,128 @@ exports.Observable = class Observable
 ENTITY_LAST_ID=0
 
 # Base object contained in model
-exports.Entity = class Entity
-    constructor: (@model, id) ->
-        if not id then ENTITY_LAST_ID += 1
-        @id = id or ENTITY_LAST_ID
-
-    create: (data) ->
+exports.Entity = class Entity extends Observable
+    constructor: (@model, data) ->
+        @id = data.id or (ENTITY_LAST_ID += 1)
         console.log "Create entity: #{@className()}::#{@id}=#{JSON.stringify( data )}"
-        if @model.view then @show()
-
-    kill: ->
-        console.log "Delete entity: #{@className()}::#{@id}"
-        if @model.view then @hide()
-
-    show: ->
-
-    hide: ->
+        @refs = data.refs or []
+        @model.add this
 
     remove: ->
-        @kill()
-        @model.remove( this )
+        console.log "Delete entity: #{@className()}::#{@id}"
+        @trigger 'remove', this
+        @model.remove this
 
     className: ->
         results = (/function (.{1,})\(/).exec((this).constructor.toString())
         if results?.length then results[1] else "unknown"
 
-    serialize: ->
-        return { 'entity':@className(), 'id':@id }
+    serialize: (data) ->
+        data ||= {}
+        data.entity=@className()
+        data.id=@id
+        data.refs=@refs
+        return data
+
+    link: (entity) ->
+        entity.refs.push( @id )
+        @refs.push( entity.id )
+
+    unlink: (entity) ->
+        entity.refs.remove( @id )
+        @refs.remove( entity.id )
+
+    links: ->
+        @model.get( id ) for id in @refs
+
+    linkCount: ->
+        @refs.length
+
+    show: ->
+
+    hide: ->
+
 
 exports.Avatar = class Avatar extends Entity
 
-    create: (data) ->
+    constructor: (model,data) ->
+        super(model,data)
         @name = data.name || "anon-" + @id
         @status = data.status || "online"
-        @refs = data.refs || []
-        super(data)
 
-    serialize: ->
-        data = super()
+    serialize: (data)->
+        data = super(data)
         data.name = @name
         data.status = @status
-        data.refs = @refs
         return data
 
     show: ->
-        html = $("<li id=#{@id} class='user #{@status} #{if @model.userId == @id then "me" else "not-me"}'>#{@name}</li>")
-        if $('#' + @id ).length > 0
-            $('#' + @id ).replaceWith( html )
-        else
-            $('#users-list').append( html )
+        @model.view.userMake( this )
 
     hide: ->
-        $('#' + @id).remove()
+        @model.view.remove( @id )
 
+exports.Channel = class Channel extends Entity
+    constructor: (model,data) ->
+        super(model,data)
+        @name = data.name or "Public"
+
+    serialize: (data)->
+        data = super(data)
+        data.name = @name
+        return data
+
+    show: ->
+        @model.view.tabMake( @id, @name )
+
+    hide: ->
+        @model.view.tabRemove( @id )
 
 exports.Message = class Message extends Entity
 
-    create: (data) ->
+    constructor: (model,data) ->
+        super(model,data)
         @message = data.message
-        @from = @model.get( data.from )
-        if data.to == "public"
-            @to = {'id':'public','name':'Public', 'refs':[] }
-        else
-            @to = @model.get( data.to )
-        @from.refs.push(@id)
-        super(data)
+        @from = data.from
+        @channel = @model.get( data.channel )
+
+    remove: ->
+        @from.unlink( this )
+        super()
 
     show: ->
-        @model.view.tabMake( @to.id, @to.name )
-        $('#content-' + @to.id).append("<li id=#{@id}><span>#{@from.name}</span>:<span>#{@message}</span></li>")
+        @model.view.messageMake( this )
 
     hide: ->
-        $('#' + @id).remove()
+        @model.view.remove( @id )
 
-    serialize: ->
-        data = super()
+    serialize: (data)->
+        data = super(data)
         data.message = @message
-        data.from = @from.id
-        data.to = @to.id
+        data.from = @from
+        data.channel = @channel.id
         return data
 
-
 # Class to execute commands received from Controller or network
-exports.Executor = class Executor
+exports.Controller = class Controller
     constructor: (@model)->
 
     create: (data)->
-        e = new exports[data.entity](@model, data.id )
-        e.create data
-        @model.add e
+        e = new exports[data.entity](@model, data)
+        if @model.view? then @model.view.create e
+        return e
 
     connect: (data) ->
         console.log "User #{data.id} connected"
-        e = new Avatar(@model,data.id)
-        e.create( data )
-        @model.add e
+        avatar = new Avatar(@model,data)
+        @model.public.link(avatar)
+        if @model.view? then @model.view.create avatar
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
-        avatar = @model.entities[ data.id ]
-        if avatar.refs.length > 0
-            avatar.status = "offline"
-            avatar.show() if @model.view
-        else
-            avatar.remove()
+        avatar = @model.get( data.id )
+        @model.public.unlink(avatar)
+        avatar.remove()
 
 # Main class that incapsulate all other objects
 exports.Model = class Model extends Observable
@@ -138,7 +156,10 @@ exports.Model = class Model extends Observable
         @entities = {}
         @indexes = {}
         @entitiesCount = 0
-        @executor  = new Executor(this)
+        @controller  = new Controller(this)
+
+        # Create default public channel
+        @public = @controller.create {'entity':'Channel','id':'public','name':'Public'}
 
     add: (e)->
         @entities[ e.id ] = e
@@ -154,15 +175,15 @@ exports.Model = class Model extends Observable
     get: (id) ->
         return @entities[ id ]
 
-    send: (action, data) ->
+    send: (data) ->
         throw "Model.send: Virtual method called"
 
-    execute: (action,data)->
-        console.log " <- " + action + ":" + JSON.stringify( data )
-        try
-            @executor[ action ]( data )
-            return true
-        catch error
-            console.log "ERROR: action=#{action} Error:#{error}"
-            return false
+    execute: (data)->
+        console.log " <- " + JSON.stringify( data )
+#        try
+        @controller[ data.action ]( data )
+        return true
+#       catch error
+#           console.log "ERROR: action=#{data.action} Error:#{error}"
+#            return false
 
