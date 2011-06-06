@@ -7,6 +7,8 @@ class Client extends window.Model
         @socket = new io.Socket()
         @observe "connect", =>
             @userId = @socket.transport.sessionid
+            # Attach HTTP session to socket.io session
+            @send {'action':'connect','sid':window.SID}
             console.log( "Connected: " + @userId )
         @observe 'disconnect', =>
             console.log( "Disconnected: " + @userId )
@@ -110,4 +112,3 @@ class GUI
 # Entry point
 $(document).ready ->
     client = new Client()
-

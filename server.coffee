@@ -1,15 +1,20 @@
 pub     = __dirname + '/public'
 express = require('express')
 lib     = require "./common"
+connect = require('connect')
 form    = require('connect-form')
 fs      = require('fs')
-            
+
 BAD_BROWSER = /(MSIE 6)|(MSIE 5)|(MSIE 4)/g
+
+USER_ID=0
 
 class Server extends lib.Model
     constructor: ->
         # Server model has null view
         super( null )
+
+        @sessionStore = new express.session.MemoryStore()
 
         # Create express HTTP server
         @app = express.createServer(
@@ -17,6 +22,8 @@ class Server extends lib.Model
             express.compiler({ src: pub, enable: ['sass'] }),
             express.static(pub),
             express.logger(),
+            express.cookieParser(),
+            express.session({ secret: 'HIf89dsghK', store: @sessionStore }),
             express.errorHandler({ dumpExceptions: true, showStack: true }))
 
         # Home page
@@ -44,7 +51,8 @@ class Server extends lib.Model
                         '/js/common.js',
                         "/js/client.js"
                     ],
-                    'url': url
+                    'url': url,
+                    'sid': req.sessionID
                 }
 
         # Upload file handler
@@ -70,28 +78,21 @@ class Server extends lib.Model
 
         # socket.io connection handlers
         @socket.on 'connection', (client) =>
-            sid = client.sessionId
-            # Fire connect event
-            @trigger 'connect', sid, client
-
             # Message handler
             client.on 'message', (message) =>
-                @trigger 'message', JSON.parse(message)
+                message = JSON.parse(message)
+                # Handle 'connect' event separately
+                if message.action == 'connect'
+                    # Get HTTP session
+                    @sessionStore.get message.sid, (error, session) =>
+                        # Execute connect handler
+                        @onConnect client.sessionId, client, message.sid, session
+                else
+                    # Handle other messages
+                    @trigger 'message', message
             # Disconnect handler
             client.on 'disconnect', =>
-                @trigger 'disconnect', sid
-
-        # Connect event handler
-        @observe 'connect', (id,socket)=>
-            # Handle connect at server model
-            @controller.connect {id}
-            @get( id ).socket = socket
-            # Send model to connected avatar
-            for etype in ["Channel","Avatar","Message"]
-                for i, ent of @indexes[ etype ]
-                    @send ent.serialize {'action':'create','avatar':id}
-            # Broadcast connect event
-            @send {"action":"connect",id}
+                @trigger 'disconnect', client.sessionId
 
         @observe 'disconnect', (id)=>
                 # Handle at server
@@ -107,6 +108,26 @@ class Server extends lib.Model
         # Start server
         @app.listen(process.env.PORT || 8000)
 
+    # 'connect' event handler
+    onConnect: (id,socket,sid,session) ->
+        # Handle connect at server model
+        @controller.connect {id}
+        avatar = @get( id )
+        avatar.socket = socket
+        avatar.session = session
+        session.save = (cb) =>
+            @sessionStore.set(sid,session,cb)
+
+        session.nick ||= ("Anon" + (USER_ID+=1))
+        avatar.name = session.nick
+        session.save()
+
+        # Send model to connected avatar
+        for etype in ["Channel","Avatar","Message"]
+            for i, ent of @indexes[ etype ]
+                @send ent.serialize {'action':'create','avatar':id}
+        # Broadcast connect event
+        @send {"action":"connect",id,'name':session.nick}
 
     # Send event
     send: (data)->
@@ -118,7 +139,6 @@ class Server extends lib.Model
         # Send to channel
         if data.channel?
             for avatar in @get( data.channel ).links()
-                console.log "SEND TO AVATAR" + avatar.id
                 avatar.socket.send JSON.stringify(data)
             return
          # Send to all

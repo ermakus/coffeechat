@@ -120,6 +120,7 @@ exports.Controller = class Controller
         avatar = new Avatar(@model,data)
         @model.public.link(avatar)
         if @model.view? then @model.view.create avatar
+        return avatar
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
