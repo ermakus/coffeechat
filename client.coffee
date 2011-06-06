@@ -36,7 +36,7 @@ class View
         entity.observe 'remove', => @remove()
 
     remove: ->
-        $('#' + entity.id ).remove()
+        $('#' + @entity.id ).remove()
 
 window.AvatarView = class AvatarView extends View
     constructor:(@entity)->
@@ -106,14 +106,6 @@ class GUI
 
     layoutUpdate: ->
         $('#accordion').accordion( "resize" )
-
-
-    userMake: (avatar) ->
-
-    messageMake: (message) ->
-
-    remove: (id) ->
-        $('#' + id).remove()
 
 # Entry point
 $(document).ready ->

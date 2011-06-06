@@ -63,10 +63,6 @@ exports.Entity = class Entity extends Observable
     linkCount: ->
         @refs.length
 
-    show: ->
-
-    hide: ->
-
 
 exports.Avatar = class Avatar extends Entity
 
@@ -81,12 +77,6 @@ exports.Avatar = class Avatar extends Entity
         data.status = @status
         return data
 
-    show: ->
-        @model.view.userMake( this )
-
-    hide: ->
-        @model.view.remove( @id )
-
 exports.Channel = class Channel extends Entity
     constructor: (model,data) ->
         super(model,data)
@@ -96,12 +86,6 @@ exports.Channel = class Channel extends Entity
         data = super(data)
         data.name = @name
         return data
-
-    show: ->
-        @model.view.tabMake( @id, @name )
-
-    hide: ->
-        @model.view.tabRemove( @id )
 
 exports.Message = class Message extends Entity
 
@@ -114,12 +98,6 @@ exports.Message = class Message extends Entity
     remove: ->
         @from.unlink( this )
         super()
-
-    show: ->
-        @model.view.messageMake( this )
-
-    hide: ->
-        @model.view.remove( @id )
 
     serialize: (data)->
         data = super(data)
