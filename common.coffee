@@ -12,6 +12,11 @@ exports.BASE_URL = "http://localhost:8000"
 # Remove function for arrays
 Array::remove = (e) -> @[t..t] = [] if (t = @.indexOf(e)) > -1
 
+# GUID generator
+GUID = ->
+   S4 = -> (((1+Math.random())*0x10000)|0).toString(16).substring(1)
+   (S4()+S4()+"-"+S4()+"-"+S4()+"-"+S4()+"-"+S4()+S4()+S4())
+
 # Observer pattern
 exports.Observable = class Observable
   observe: (name, fn) ->
@@ -23,12 +28,10 @@ exports.Observable = class Observable
   observers: (name) ->
     (@_observers ||= {})[name] ||= []
 
-ENTITY_LAST_ID=0
-
 # Base object contained in model
 exports.Entity = class Entity extends Observable
     constructor: (@model, data) ->
-        @id = data.id or (ENTITY_LAST_ID += 1)
+        @id = data.id or GUID()
         console.log "Create entity: #{@className()}::#{@id}=#{JSON.stringify( data )}"
         @refs = data.refs or []
         @model.add this
@@ -112,6 +115,7 @@ exports.Controller = class Controller
 
     create: (data)->
         e = new exports[data.entity](@model, data)
+        data.id = e.id
         if @model.view? then @model.view.create e
         return e
 

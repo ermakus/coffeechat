@@ -43,26 +43,30 @@ class ServerModel extends lib.Model
             if @execute( data ) then @send data
 
 
-
     # 'connect' event handler
     onConnect: (id,socket,sid,session) ->
         # Handle connect at server model
         @controller.connect {'id':id}
         avatar = @get( id )
+
+        # Associate avatar model with socket and HTTP session
         avatar.socket = socket
         avatar.session = session
+
+        # save helper for session
         session.save = (cb) =>
             @site.sessionStore.set(sid,session,cb)
 
         # User is logged in at this moment
         avatar.name = session.user.login
 
-        # Send model to connected avatar
+        # Send server state to connected user
         for etype in ["Channel","Avatar","Message"]
             for i, ent of @indexes[ etype ]
                 @send ent.serialize {'action':'create','avatar':id}
+
         # Broadcast connect event
-        @send {"action":"connect",'id':id,'name':avatar.name}
+        @send avatar.serialize {"action":"connect"}
 
     # Send event
     send: (data)->
