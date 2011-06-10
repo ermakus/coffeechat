@@ -11,6 +11,7 @@ class ServerModel extends lib.Model
     constructor: (@site)->
         # Server model has null view
         super( null )
+        @connections = {}
         # Create socket.io
         @socket = require('socket.io').listen @site.app
 
@@ -23,65 +24,76 @@ class ServerModel extends lib.Model
                 if message.action == 'connect'
                     # Get HTTP session
                     @site.sessionStore.get message.sid, (error, session) =>
+                        # Create 'save' helper for session instance
+                        session.save = (cb) => @site.sessionStore.set(message.sid,session,cb)
                         # Execute connect handler
-                        @onConnect client.sessionId, client, message.sid, session
+                        @connections[ client.sessionId ] = @connectAvatar client, session
                 else
                     # Handle other messages
-                    @trigger 'message', message
+                    if @execute( message ) then @send message
             # Disconnect handler
             client.on 'disconnect', =>
-                @trigger 'disconnect', client.sessionId
-
-        @observe 'disconnect', (id)=>
-                # Handle at server
-                @controller.disconnect {id}
-                # Broadcast disconnect event
-                @send {'action':'disconnect',id}
-
-        # Handle incoming event
-        @observe 'message', (data)=>
-            if @execute( data ) then @send data
+                avatar = @connections[ client.sessionId ]
+                delete @connections[ client.sessionId ]
+                avatar.sockets.remove client
+                # Remove avatar if all sockets disconnected
+                if avatar.sockets.length == 0
+                    # Handle at server
+                    @controller.disconnect {'id':avatar.id}
+                    # Broadcast disconnect event
+                    @send {'action':'disconnect','id':avatar.id}
 
 
     # 'connect' event handler
-    onConnect: (id,socket,sid,session) ->
-        # Handle connect at server model
-        @controller.connect {'id':id}
-        avatar = @get( id )
+    connectAvatar: (socket,session) ->
+        # Avatar ID = user login
+        id = session.user.login
 
-        # Associate avatar model with socket and HTTP session
-        avatar.socket = socket
+        # Create/find avatar
+        avatar = @controller.connect {'id':id}
+        avatar.name = id
+
+        # Add socket to avatar collection
+        avatar.sockets ||= []
+        avatar.sockets.push socket
+
+        # Link to HTTP session
         avatar.session = session
 
-        # save helper for session
-        session.save = (cb) =>
-            @site.sessionStore.set(sid,session,cb)
+        # Send channels avatar connected to
+        for i, ent of @indexes[ "Channel" ]
+            @send ent.serialize {'action':'create','avatar':id } if ent.hasLink( avatar )
 
-        # User is logged in at this moment
-        avatar.name = session.user.login
+        # Send all avatars
+        for i, ent of @indexes[ "Avatar" ]
+            @send ent.serialize {'action':'create','avatar':id }
 
-        # Send server state to connected user
-        for etype in ["Channel","Avatar","Message"]
-            for i, ent of @indexes[ etype ]
-                @send ent.serialize {'action':'create','avatar':id}
+        # Send messages to connected channels
+        for i, ent of @indexes[ "Message" ]
+            @send ent.serialize {'action':'create','avatar':id } if ent.channel.hasLink( avatar )
 
-        # Broadcast connect event
-        @send avatar.serialize {"action":"connect"}
+        # Broadcast connect event for first connected avatar
+        if avatar.sockets.length == 1
+            @send avatar.serialize {"action":"connect"}
+
+        return avatar
 
     # Send event
     send: (data)->
-        console.log " -> " + JSON.stringify data
+        json = JSON.stringify data
+        console.log " -> " + json
         # Send to avatar
         if data.avatar?
-            @get( data.avatar ).socket.send JSON.stringify(data)
+            avatar = @get( data.avatar )
+            if avatar then socket.send json for socket in avatar.sockets
             return
         # Send to channel
         if data.channel?
             for avatar in @get( data.channel ).links()
-                avatar.socket.send JSON.stringify(data)
+                if avatar then socket.send json for socket in avatar.sockets
             return
          # Send to all
-        @socket.broadcast JSON.stringify(data)
+        @socket.broadcast json
 
 class Site
     constructor: ->
@@ -100,14 +112,13 @@ class Site
 
         # Filter all requests
         @app.get '*', (req, res, next)->
-            console.log 'HOOK: ' + req.url
             # Check for old browser
             browser = req.header('User-Agent')
             if not browser or browser.match( BAD_BROWSER )
                 res.render 'badagent.jade', { 'title': 'Your browser too old', 'scripts': [] }
                 return
             # Exclude login page
-            if req.url == '/login' then return next()
+            if req.url in ['/','/login'] then return next()
             # Ensure user logged in
             if !req.session['user']
                 res.redirect '/login'
@@ -134,7 +145,8 @@ class Site
                     "/js/client.js"
                 ],
                 'url': req.param('url','default'),
-                'sid': req.sessionID
+                'sid': req.sessionID,
+                'uid': req.session.user.login
             }
 
         # Login form

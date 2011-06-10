@@ -6,7 +6,7 @@ class Client extends window.Model
         @observingSocket = {}
         @socket = new io.Socket()
         @observe "connect", =>
-            @userId = @socket.transport.sessionid
+            @userId = window.UID #@socket.transport.sessionid
             # Attach HTTP session to socket.io session
             @send {'action':'connect','sid':window.SID}
             console.log( "Connected: " + @userId )
@@ -28,7 +28,7 @@ class Client extends window.Model
         @socket.send JSON.stringify(data)
 
     privateChat: (uid) ->
-        @send {'action':'create','entity':'Channel','name':@get(uid).name,'refs':[@userId,uid] }
+        @send {'action':'createChannel','entity':'Channel','name':@get(uid).name,'refs':[@userId,uid] }
 
     message: (msg) ->
         @send {'action':'create','entity':'Message','message':msg,'from':@get(@userId).name,'channel':@view.tabId() }

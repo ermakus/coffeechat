@@ -50,11 +50,12 @@ exports.Entity = class Entity extends Observable
         data.entity=@className()
         data.id=@id
         data.refs=@refs
-        return data
+        data
 
     link: (entity) ->
-        entity.refs.push( @id )
-        @refs.push( entity.id )
+        if @refs.indexOf( entity.id ) < 0 then @refs.push( entity.id )
+        if entity.refs.indexOf( @id ) then entity.refs.push( @id )
+            
 
     unlink: (entity) ->
         entity.refs.remove( @id )
@@ -66,6 +67,8 @@ exports.Entity = class Entity extends Observable
     linkCount: ->
         @refs.length
 
+    hasLink: (entity)->
+        @refs.indexOf( entity.id ) >= 0
 
 exports.Avatar = class Avatar extends Entity
 
@@ -99,7 +102,6 @@ exports.Message = class Message extends Entity
         @channel = @model.get( data.channel )
 
     remove: ->
-        @from.unlink( this )
         super()
 
     serialize: (data)->
@@ -114,17 +116,22 @@ exports.Controller = class Controller
     constructor: (@model)->
 
     create: (data)->
-        e = new exports[data.entity](@model, data)
-        data.id = e.id
-        if @model.view? then @model.view.create e
-        return e
+        entity = new exports[data.entity](@model, data)
+        data.id = entity.id
+        if @model.view? then @model.view.create entity
+        entity
+
+    createChannel: (data)->
+        channel = @create data
+        data.channel = channel.id
+        channel
 
     connect: (data) ->
         console.log "User #{data.id} connected"
-        avatar = new Avatar(@model,data)
+        avatar = @model.get(data.id) or new Avatar(@model,data)
         @model.public.link(avatar)
         if @model.view? then @model.view.create avatar
-        return avatar
+        avatar
 
     disconnect: (data)->
         console.log "User #{data.id} disconnected"
